@@ -8,11 +8,13 @@ us from stealing the card back in between the restarts of a crash-looping job.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -31,6 +33,10 @@ WORKER = Path(__file__).parent / "dummy_worker" / "worker.py"
 # that without giving up the process name. (The stdlib itself is still found via
 # /proc/self/exe, which is why the ctypes backend works regardless.)
 _INHERITED_PYTHONPATH = os.pathsep.join(p for p in sys.path if p and os.path.isdir(p))
+
+# Workers drop a small JSON file here saying which backend they ended up using, or why
+# none of them worked. It is the only view into a node the operator cannot SSH into.
+_STATUS_DIR = Path(tempfile.gettempdir()) / f"gpu-agent-{os.getuid()}"
 
 _TERM_GRACE = 5.0
 # Exponential backoff after a worker exits on its own (bad driver, no PTX support, ...)
@@ -59,11 +65,25 @@ class DummyManager:
         return proc if proc is not None and proc.poll() is None else None
 
     def annotate(self, gpus: list[dict]) -> None:
-        """Stamp each GPU dict with whether our dummy is live on it."""
+        """Stamp each GPU dict with whether our dummy is live on it, and how it is doing."""
         for gpu in gpus:
-            proc = self.active(gpu["index"])
+            index = gpu["index"]
+            proc = self.active(index)
             gpu["dummy_active"] = proc is not None
             gpu["dummy_pid"] = proc.pid if proc is not None else None
+
+            status = self._read_status(index)
+            gpu["dummy_backend"] = status.get("backend") if proc is not None else None
+            gpu["dummy_error"] = status.get("error")
+
+    def _status_path(self, gpu_index: int) -> Path:
+        return _STATUS_DIR / f"gpu{gpu_index}.json"
+
+    def _read_status(self, gpu_index: int) -> dict:
+        try:
+            return json.loads(self._status_path(gpu_index).read_text())
+        except Exception:
+            return {}
 
     # ---------------------------------------------------------------- reconcile
 
@@ -141,6 +161,16 @@ class DummyManager:
         env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         env["PYTHONPATH"] = _INHERITED_PYTHONPATH
 
+        # Clear the previous run's verdict so a stale error cannot be mistaken for this
+        # worker's, and so the dashboard shows "starting" rather than the last failure.
+        status_path = self._status_path(index)
+        try:
+            status_path.unlink()
+        except FileNotFoundError:
+            pass
+        except Exception:
+            log.exception("GPU %d: could not clear %s", index, status_path)
+
         args = [
             DUMMY_ARGV0,  # argv[0] -- this is the name nvidia-smi will display
             str(WORKER),
@@ -148,6 +178,7 @@ class DummyManager:
             "--chunk-mb", str(self.config.dummy_chunk_mb),
             "--backend", "auto" if self.config.dummy_backend == "auto" else self.config.dummy_backend,
             "--label", f"gpu{index}",
+            "--status-file", str(status_path),
         ]
         if not self.config.dummy_target_util:
             args.append("--no-util")

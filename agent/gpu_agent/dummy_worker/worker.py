@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import json
 import os
 import signal
 import sys
@@ -76,6 +77,29 @@ def die_with_parent() -> None:
 
 def log(msg: str) -> None:
     print(f"[dummy] {msg}", flush=True)
+
+
+class Status:
+    """Reports which backend won (or why none did) back to the agent.
+
+    The agent forwards this to the dashboard, which is the only way to tell what a dummy
+    is actually doing on a node you cannot SSH into -- exactly the case this exists for.
+    """
+
+    def __init__(self, path: str | None) -> None:
+        self.path = Path(path) if path else None
+
+    def write(self, **fields) -> None:
+        if self.path is None:
+            return
+        payload = {"pid": os.getpid(), **fields}
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload))
+            os.replace(tmp, self.path)
+        except Exception:
+            pass  # never let status reporting take the worker down
 
 
 # --------------------------------------------------------------- CUDA driver API
@@ -212,7 +236,7 @@ class CudaDriver:
         self.check(self.lib.cuCtxSynchronize(), "cuCtxSynchronize")
 
 
-def run_cuda(headroom: int, chunk: int, want_util: bool) -> None:
+def run_cuda(headroom: int, chunk: int, want_util: bool, status: Status) -> None:
     drv = CudaDriver()
     drv.init()
     try:
@@ -235,6 +259,7 @@ def run_cuda(headroom: int, chunk: int, want_util: bool) -> None:
             f"backend=cuda held={held / MIB:.0f}MiB "
             f"free={free / MIB:.0f}MiB total={total / MIB:.0f}MiB util={'on' if want_util else 'off'}"
         )
+        status.write(backend="cuda", held_mb=int(held / MIB), util=want_util)
 
         if not want_util:
             while _running:
@@ -262,7 +287,7 @@ def run_cuda(headroom: int, chunk: int, want_util: bool) -> None:
 # ---------------------------------------------------------------- torch backend
 
 
-def run_torch(headroom: int, chunk: int, want_util: bool) -> None:
+def run_torch(headroom: int, chunk: int, want_util: bool, status: Status) -> None:
     import torch
 
     if not torch.cuda.is_available():
@@ -300,6 +325,7 @@ def run_torch(headroom: int, chunk: int, want_util: bool) -> None:
         f"backend=torch held={held / MIB:.0f}MiB "
         f"free={free / MIB:.0f}MiB total={total / MIB:.0f}MiB util={'on' if want_util else 'off'}"
     )
+    status.write(backend="torch", held_mb=int(held / MIB), util=want_util)
 
     while _running:
         if want_util:
@@ -319,7 +345,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--backend", default="auto", choices=["auto", "cuda", "torch"])
     parser.add_argument("--no-util", action="store_true")
     parser.add_argument("--label", default="", help="informational only; shows up in ps output")
+    parser.add_argument("--status-file", default="", help="where to report the chosen backend")
     args = parser.parse_args(argv)
+
+    status = Status(args.status_file or None)
 
     set_process_name("dummy")
     signal.signal(signal.SIGTERM, _handle_signal)
@@ -331,16 +360,17 @@ def main(argv: list[str] | None = None) -> int:
     want_util = not args.no_util
 
     backends = ["cuda", "torch"] if args.backend == "auto" else [args.backend]
-    last_error: Exception | None = None
+    attempts: list[str] = []
     for backend in backends:
         try:
-            (run_cuda if backend == "cuda" else run_torch)(headroom, chunk, want_util)
+            (run_cuda if backend == "cuda" else run_torch)(headroom, chunk, want_util, status)
             return 0
         except Exception as exc:
-            last_error = exc
+            attempts.append(f"{backend}: {exc}")
             log(f"backend {backend} failed: {exc}")
 
-    log(f"all backends failed: {last_error}")
+    log(f"all backends failed -- {'; '.join(attempts)}")
+    status.write(backend=None, error="; ".join(attempts)[:300])
     return 1
 
 

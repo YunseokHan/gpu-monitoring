@@ -49,7 +49,7 @@ export function GpuCard({ gpu, canControl, busy, onToggleDummy }: GpuCardProps) 
               {shortName(gpu.name)}
             </span>
           </div>
-          <DummyState state={dummyState} />
+          <DummyState state={dummyState} backend={gpu.dummy_backend} error={gpu.dummy_error} />
         </div>
         <Toggle
           checked={gpu.dummy_enabled}
@@ -104,12 +104,32 @@ const DUMMY_STATE_TEXT: Record<string, { text: string; color: string }> = {
   off: { text: '', color: 'var(--muted)' },
 }
 
-function DummyState({ state }: { state: string }) {
+function DummyState({
+  state,
+  backend,
+  error,
+}: {
+  state: string
+  backend: string | null
+  error: string | null
+}) {
+  // A worker that could not start at all is the one thing here worth interrupting for --
+  // on a node nobody can SSH into, this line is the whole diagnosis.
+  if (error) {
+    return (
+      <div className="truncate text-[10px] leading-4" style={{ color: 'var(--critical)' }} title={error}>
+        dummy failed: {error}
+      </div>
+    )
+  }
   const entry = DUMMY_STATE_TEXT[state]
   if (!entry.text) return <div className="h-4" />
   return (
     <div className="truncate text-[10px] leading-4" style={{ color: entry.color }}>
       {entry.text}
+      {state === 'holding' && backend && (
+        <span style={{ color: 'var(--muted)' }}> · {backend}</span>
+      )}
     </div>
   )
 }

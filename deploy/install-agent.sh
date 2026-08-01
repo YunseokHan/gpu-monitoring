@@ -16,6 +16,16 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$ROOT/deploy/agent.env"
 VENV="$ROOT/agent/.venv"
 
+# An earlier install's settings become the defaults, so upgrading a node is
+# `git pull && bash deploy/install-agent.sh` with no arguments to look up. That matters
+# most for nodes reached by hand rather than by deploy-remote.sh.
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+
 HUB_URL="${GPU_AGENT_HUB_URL:-}"
 TOKEN="${GPU_AGENT_TOKEN:-}"
 NODE_ID="${GPU_AGENT_NODE_ID:-$(hostname)}"

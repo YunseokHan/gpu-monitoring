@@ -24,6 +24,8 @@ export interface GpuSnapshot {
   processes: ProcInfo[]
   dummy_active: boolean
   dummy_pid: number | null
+  dummy_backend: string | null
+  dummy_error: string | null
   dummy_enabled: boolean
 }
 

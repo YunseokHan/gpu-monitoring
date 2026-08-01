@@ -37,6 +37,9 @@ class GpuSnapshot(BaseModel):
     # Reported by the agent: is our dummy process actually running on this GPU right now?
     dummy_active: bool = False
     dummy_pid: Optional[int] = None
+    # Which backend the worker settled on ("cuda" or "torch"), and the reason none worked.
+    dummy_backend: Optional[str] = None
+    dummy_error: Optional[str] = None
     # Filled in by the hub from its desired state, not by the agent.
     dummy_enabled: bool = False
 

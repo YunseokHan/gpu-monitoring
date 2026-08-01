@@ -23,6 +23,15 @@ log = logging.getLogger(__name__)
 
 WORKER = Path(__file__).parent / "dummy_worker" / "worker.py"
 
+# The worker is started with argv[0] = "dummy" so that nvidia-smi displays that name.
+# The cost is that CPython can no longer locate its own installation from argv[0]: the
+# child ends up with an empty sys.executable and the *base* prefix rather than the
+# virtualenv, so anything installed in the venv -- notably torch, the dummy's fallback
+# backend -- becomes unimportable. Handing the child our own resolved sys.path fixes
+# that without giving up the process name. (The stdlib itself is still found via
+# /proc/self/exe, which is why the ctypes backend works regardless.)
+_INHERITED_PYTHONPATH = os.pathsep.join(p for p in sys.path if p and os.path.isdir(p))
+
 _TERM_GRACE = 5.0
 # Exponential backoff after a worker exits on its own (bad driver, no PTX support, ...)
 # so a permanently broken GPU does not turn into a spawn loop.
@@ -130,6 +139,7 @@ class DummyManager:
         # Pin by UUID rather than ordinal: immune to enumeration order changing.
         env["CUDA_VISIBLE_DEVICES"] = uuid
         env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        env["PYTHONPATH"] = _INHERITED_PYTHONPATH
 
         args = [
             DUMMY_ARGV0,  # argv[0] -- this is the name nvidia-smi will display

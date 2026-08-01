@@ -1,0 +1,22 @@
+[project]
+name = "gpu-agent"
+version = "0.1.0"
+description = "Per-node GPU monitoring agent: reports to the hub and manages dummy processes"
+requires-python = ">=3.9"
+# nvidia-ml-py is a pure-ctypes wrapper with no sub-dependencies. Everything else the
+# agent needs (HTTP, JSON, subprocess, the CUDA driver API) comes from the stdlib, which
+# is what keeps deployment to a fresh node down to one script.
+dependencies = ["nvidia-ml-py>=12.535"]
+
+[project.scripts]
+gpu-agent = "gpu_agent.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["gpu_agent"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"gpu_agent/dummy_worker/kernel.ptx" = "gpu_agent/dummy_worker/kernel.ptx"

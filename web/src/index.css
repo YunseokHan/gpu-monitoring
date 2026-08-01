@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+/* Palette roles. Light is the base; dark is a selected set of steps for the dark
+   surface, not an automatic inversion. Declared under both the OS media query and the
+   [data-theme] scope so an explicit choice wins either way -- the dashboard is embedded
+   in Notion, where ?theme=dark|light on the embed URL is the only way to pin it. */
+:root {
+  color-scheme: light;
+
+  --surface-1: #fcfcfb;
+  --surface-2: #f2f2ef;
+  --plane: #f9f9f7;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --hairline: rgba(11, 11, 11, 0.1);
+  --grid: #e1e0d9;
+
+  --util: #2a78d6;   /* sequential hue 1 -- utilization */
+  --vram: #eb6834;   /* sequential hue 2 -- memory */
+  --dummy: #4a3aa7;  /* the dummy holder, always paired with the word "dummy" */
+
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+
+    --surface-1: #1a1a19;
+    --surface-2: #232322;
+    --plane: #0d0d0d;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --hairline: rgba(255, 255, 255, 0.1);
+    --grid: #2c2c2a;
+
+    --util: #3987e5;
+    --vram: #d95926;
+    --dummy: #9085e9;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface-1: #1a1a19;
+  --surface-2: #232322;
+  --plane: #0d0d0d;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --hairline: rgba(255, 255, 255, 0.1);
+  --grid: #2c2c2a;
+
+  --util: #3987e5;
+  --vram: #d95926;
+  --dummy: #9085e9;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* The page itself never scrolls sideways; wide children get their own scroller. */
+  overflow-x: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

@@ -114,6 +114,14 @@ command -v nvidia-smi >/dev/null 2>&1 || warn "nvidia-smi not found; the agent w
 # touching the node's Python, not to isolate us from it -- and keeping the system
 # packages visible is what makes the dummy worker's torch fallback real on nodes where
 # torch is already installed.
+#
+# The venv is recreated from scratch every run. Pointing `python -m venv` at an existing
+# directory rewrites pyvenv.cfg but leaves bin/python alone, so re-running the installer
+# after the chosen interpreter changed would silently leave a venv whose config claims
+# one version while its binary is another -- and this script is meant to be the upgrade
+# path, not just the first-time path.
+rm -rf "$VENV"
+
 AGENT_PY=""
 if "$PY" -m venv --system-site-packages "$VENV" >/dev/null 2>&1; then
   AGENT_PY="$VENV/bin/python"

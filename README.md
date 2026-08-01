@@ -57,6 +57,12 @@ edge to size it. Details and the fixed-domain setup are in
 Add `&theme=dark` or `&theme=light` to pin the theme — an iframe cannot see which theme
 the surrounding Notion page is using, so by default it follows the viewer's OS setting.
 
+> **A quick tunnel's hostname changes every time it restarts.** The remote agents have
+> that hostname baked into `deploy/agent.env`, so after `deploy/tunnel.sh restart` you
+> must re-paste the URL into Notion *and* re-run `deploy/deploy-remote.sh`. Set up a
+> named tunnel with a domain you control ([deploy/NOTION.md](deploy/NOTION.md)) and
+> neither is ever needed again.
+
 ## The dummy process
 
 A dummy occupies a GPU so it *looks* busy — useful for holding a card, or for keeping a
@@ -78,17 +84,23 @@ this GPU"*. The dashboard distinguishes the two states: **dummy holding this GPU
 
 ### The one risk worth knowing about
 
-Detection is not instantaneous. If someone starts a job on a GPU a dummy is holding, there
-is a window of up to one tick (1 s) plus shutdown time where their allocation can fail.
-Three things narrow it:
+Detection is not instantaneous, so there is a window where an incoming job's allocation
+can fail. What saves it in practice is that creating a CUDA context takes a second or
+two on its own, and the process becomes visible to NVML at the *start* of that — which is
+usually enough time for the agent to notice and get out of the way.
 
-- a real process shows up in NVML as soon as it creates its CUDA context (~300 MB), well
-  before it allocates its working set, so we usually see it in time;
-- the dummy leaves `--headroom-mb` (2 GB by default) free precisely so that context
-  creation succeeds;
-- `--interval` can be lowered to 0.5 s.
+Measured on a B200 node (183 GB cards, dummy holding ~181 GB, 1 s tick):
 
-Raise `--headroom-mb` on a busy shared node if you would rather be safe than full.
+| Incoming job | Result |
+|---|---|
+| context, ~5 s of setup, then 10 GB | allocated at t+6.8 s — fine |
+| context then 10 GB immediately, ×3 | allocated at t+1.8 s — fine all three times |
+| context then **150 GB** immediately | `OutOfMemoryError` at t+1.7 s |
+| the same 150 GB job, retried at once | allocated at t+2.2 s — fine |
+
+So a normal job is unaffected, and a job that asks for most of the card in the same
+instant its context comes up can lose one attempt and then succeed. If that is still too
+much for a shared node, raise `--headroom-mb` or lower `--interval` to 0.5.
 
 ### How it holds the GPU
 

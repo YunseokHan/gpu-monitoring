@@ -73,16 +73,35 @@ say "installing the GPU agent for node '$NODE_ID' (#$NODE_INDEX)"
 
 # --------------------------------------------------------------------- interpreter
 
+CANDIDATES="python3 python3.13 python3.12 python3.11 python3.10 python3.9 python"
+
+usable() {
+  command -v "$1" >/dev/null 2>&1 &&
+    "$1" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null
+}
+
+# Two passes. The agent itself only needs the stdlib, but the dummy worker's fallback
+# backend is torch, so among interpreters that work we prefer one that can already
+# import it -- otherwise the fallback exists only in the documentation.
 PY=""
-for candidate in python3.13 python3.12 python3.11 python3.10 python3 python; do
-  if command -v "$candidate" >/dev/null 2>&1 &&
-     "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
+for candidate in $CANDIDATES; do
+  if usable "$candidate" && "$candidate" -c 'import torch' 2>/dev/null; then
     PY="$(command -v "$candidate")"
+    say "using interpreter $PY ($("$PY" --version 2>&1)) -- has torch, so the dummy's fallback backend is available"
     break
   fi
 done
+if [ -z "$PY" ]; then
+  for candidate in $CANDIDATES; do
+    if usable "$candidate"; then
+      PY="$(command -v "$candidate")"
+      say "using interpreter $PY ($("$PY" --version 2>&1))"
+      warn "no interpreter on this node has torch; the dummy will rely on the ctypes/CUDA backend alone"
+      break
+    fi
+  done
+fi
 [ -n "$PY" ] || die "no Python >= 3.9 found on this node"
-say "using interpreter $PY ($("$PY" --version 2>&1))"
 
 command -v nvidia-smi >/dev/null 2>&1 || warn "nvidia-smi not found; the agent will report no GPUs"
 

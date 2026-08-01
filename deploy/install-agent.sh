@@ -88,13 +88,19 @@ command -v nvidia-smi >/dev/null 2>&1 || warn "nvidia-smi not found; the agent w
 
 # ------------------------------------------------------------------------- venv
 
-# Three ways to get an isolated interpreter, in order of how universally they work.
-# If all of them fail the agent still runs: it falls back to parsing nvidia-smi.
+# Three ways to get an interpreter, in order of how universally they work. If all of
+# them fail the agent still runs: it falls back to parsing nvidia-smi.
+#
+# --system-site-packages is deliberate. The venv exists to hold nvidia-ml-py without
+# touching the node's Python, not to isolate us from it -- and keeping the system
+# packages visible is what makes the dummy worker's torch fallback real on nodes where
+# torch is already installed.
 AGENT_PY=""
-if "$PY" -m venv "$VENV" >/dev/null 2>&1; then
+if "$PY" -m venv --system-site-packages "$VENV" >/dev/null 2>&1; then
   AGENT_PY="$VENV/bin/python"
   say "virtualenv ready at $VENV"
-elif command -v uv >/dev/null 2>&1 && uv venv --python "$PY" "$VENV" >/dev/null 2>&1; then
+elif command -v uv >/dev/null 2>&1 &&
+     uv venv --system-site-packages --python "$PY" "$VENV" >/dev/null 2>&1; then
   AGENT_PY="$VENV/bin/python"
   say "virtualenv ready at $VENV (via uv)"
 else

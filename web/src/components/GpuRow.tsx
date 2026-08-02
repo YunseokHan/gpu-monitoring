@@ -10,8 +10,14 @@ import { Toggle } from './Toggle'
  * The grid is shared by every row (see GPU_GRID) so the columns line up down the whole
  * node, which is the entire point of laying it out this way.
  */
+// Every track is fixed or capped, so the grid stops at its natural width and a wide
+// screen simply leaves space to the right. A bar stretched across 1400px reads as "full"
+// whatever its value, and it pushes temperature and power out of sight.
+//
+// Do NOT add a trailing 1fr spacer here: the second meter row is auto-placed, and a
+// spare cell in row 1 swallows its first child.
 export const GPU_GRID =
-  'grid-cols-[7.5rem_2.5rem_7rem_minmax(5rem,1fr)_3.5rem_5.5rem_2.25rem]'
+  'grid-cols-[7.5rem_2.5rem_7rem_minmax(6rem,24rem)_3.5rem_5.5rem_2.25rem]'
 
 interface GpuRowProps {
   gpu: GpuSnapshot

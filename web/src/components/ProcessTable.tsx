@@ -11,7 +11,7 @@ export function ProcessTable({ gpus }: { gpus: GpuSnapshot[] }) {
   return (
     <div className="pt-1">
       <div
-        className="grid grid-cols-[2.5rem_4.5rem_5.5rem_minmax(8rem,1fr)_5rem] gap-x-2 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide"
+        className="grid grid-cols-[2.5rem_4.5rem_5.5rem_minmax(12rem,36rem)_5rem] gap-x-2 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide"
         style={{ color: 'var(--muted)', borderTop: '1px solid var(--grid)' }}
       >
         <span>GPU</span>
@@ -29,7 +29,7 @@ export function ProcessTable({ gpus }: { gpus: GpuSnapshot[] }) {
         rows.map(({ gpu, proc }) => (
           <div
             key={`${gpu}-${proc.pid}-${proc.kind}`}
-            className="grid grid-cols-[2.5rem_4.5rem_5.5rem_minmax(8rem,1fr)_5rem] items-baseline gap-x-2 px-2 py-0.5 text-[11px] leading-4"
+            className="grid grid-cols-[2.5rem_4.5rem_5.5rem_minmax(12rem,36rem)_5rem] items-baseline gap-x-2 px-2 py-0.5 text-[11px] leading-4"
           >
             <span className="tabular-nums" style={{ color: 'var(--ink-2)' }}>
               {gpu}

@@ -47,7 +47,9 @@ export function NodeCard({ node, canControl, pending, onToggleDummy, nested }: N
           </h3>
           <span className="truncate text-[10px]" style={{ color: 'var(--muted)' }}>
             {node.gpus.length}× {node.gpus[0]?.name.replace(/^NVIDIA\s+/i, '') ?? '?'}
-            {node.driver_version && ` · driver ${node.driver_version}`}
+            {node.driver_version && (
+              <span className="hidden sm:inline"> · driver {node.driver_version}</span>
+            )}
           </span>
         </div>
 
@@ -87,7 +89,7 @@ export function NodeCard({ node, canControl, pending, onToggleDummy, nested }: N
       {/* The device table has a minimum width to stay aligned; on a narrow embed this
           block scrolls sideways on its own rather than squashing the columns. */}
       <div className="overflow-x-auto">
-        <div className="min-w-[42rem]">
+        <div className="min-w-[31rem]">
           <div
             className={`grid ${GPU_GRID} gap-x-2 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide`}
             style={{ color: 'var(--muted)' }}

@@ -38,7 +38,7 @@ export function ClusterCard({ name, nodes, canControl, pending, onToggleDummy }:
         </span>
       </header>
 
-      <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
         {nodes.map((node) => (
           <NodeCard
             key={node.node_id}

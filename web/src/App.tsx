@@ -83,6 +83,8 @@ export default function App() {
   }, [state])
 
   const groups = useMemo(() => groupNodes(state?.nodes ?? []), [state])
+  const solo = useMemo(() => groups.filter((g) => !g.cluster), [groups])
+  const clusters = useMemo(() => groups.filter((g) => g.cluster), [groups])
   const live = connected && staleness < STALE_AFTER_S
 
   return (
@@ -166,29 +168,39 @@ export default function App() {
         </p>
       )}
 
+      {/* Two node cards per row once there is room for both device tables; one column
+          below that, which is what a phone and a Notion embed get.
+
+          Standalone nodes are drawn together first so they pair up. Interleaving them
+          with the full-width cluster cards in node order would leave a hole beside every
+          standalone node that happens to sit next to a cluster. */}
       <div className="space-y-2.5">
-        {groups.map((group) =>
-          group.cluster ? (
-            <ClusterCard
-              key={group.key}
-              name={group.cluster}
-              nodes={group.nodes}
-              canControl={canControl}
-              pending={pending}
-              onToggleDummy={toggleDummy}
-            />
-          ) : (
-            <NodeCard
-              key={group.key}
-              node={group.nodes[0]}
-              canControl={canControl}
-              pending={pending}
-              onToggleDummy={(gpuIndex, enabled) =>
-                toggleDummy(group.nodes[0].node_id, gpuIndex, enabled)
-              }
-            />
-          ),
+        {solo.length > 0 && (
+          <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
+            {solo.map((group) => (
+              <NodeCard
+                key={group.key}
+                node={group.nodes[0]}
+                canControl={canControl}
+                pending={pending}
+                onToggleDummy={(gpuIndex, enabled) =>
+                  toggleDummy(group.nodes[0].node_id, gpuIndex, enabled)
+                }
+              />
+            ))}
+          </div>
         )}
+
+        {clusters.map((group) => (
+          <ClusterCard
+            key={group.key}
+            name={group.cluster!}
+            nodes={group.nodes}
+            canControl={canControl}
+            pending={pending}
+            onToggleDummy={toggleDummy}
+          />
+        ))}
       </div>
     </div>
   )

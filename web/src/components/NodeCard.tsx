@@ -1,6 +1,7 @@
 import type { NodeView } from '../types'
 import { ago, gb } from '../format'
-import { GpuCard } from './GpuCard'
+import { GPU_GRID, GpuRow } from './GpuRow'
+import { ProcessTable } from './ProcessTable'
 import { StatusDot } from './StatusDot'
 import { Toggle } from './Toggle'
 
@@ -9,9 +10,11 @@ interface NodeCardProps {
   canControl: boolean
   pending: Set<string>
   onToggleDummy: (gpuIndex: number | null, enabled: boolean) => void
+  /** Inside a cluster card the surrounding chrome is already there; stay flat. */
+  nested?: boolean
 }
 
-export function NodeCard({ node, canControl, pending, onToggleDummy }: NodeCardProps) {
+export function NodeCard({ node, canControl, pending, onToggleDummy, nested }: NodeCardProps) {
   const allOn = node.gpus.length > 0 && node.gpus.every((gpu) => gpu.dummy_enabled)
   const usedMb = node.gpus.reduce((sum, gpu) => sum + gpu.mem_used_mb, 0)
   const totalMb = node.gpus.reduce((sum, gpu) => sum + gpu.mem_total_mb, 0)
@@ -20,44 +23,43 @@ export function NodeCard({ node, canControl, pending, onToggleDummy }: NodeCardP
 
   return (
     <section
-      className="rounded-xl p-3 sm:p-4"
+      className="overflow-hidden rounded-lg"
       style={{
-        background: 'var(--surface-2)',
+        background: 'var(--surface-1)',
         border: '1px solid var(--hairline)',
         opacity: dimmed ? 0.55 : 1,
       }}
     >
-      <header className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="flex min-w-0 items-center gap-2.5">
+      <header
+        className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-2.5 py-1.5"
+        style={{ background: nested ? 'transparent' : 'var(--surface-2)' }}
+      >
+        <div className="flex min-w-0 items-baseline gap-2">
           <span
-            className="rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums"
-            style={{ background: 'var(--surface-1)', color: 'var(--ink-2)' }}
+            className="rounded px-1 text-[10px] font-semibold tabular-nums"
+            style={{ background: 'var(--surface-2)', color: 'var(--ink-2)' }}
             title="node number"
           >
             #{node.node_index}
           </span>
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>
-              {node.node_id}
-            </h2>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px]" style={{ color: 'var(--muted)' }}>
-              {node.hostname !== node.node_id && <span>{node.hostname}</span>}
-              <span>{node.gpus.length} GPU</span>
-              {node.driver_version && <span>driver {node.driver_version}</span>}
-              {node.cuda_version && <span>CUDA {node.cuda_version}</span>}
-            </div>
-          </div>
+          <h3 className="truncate text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>
+            {node.node_id}
+          </h3>
+          <span className="truncate text-[10px]" style={{ color: 'var(--muted)' }}>
+            {node.gpus.length}× {node.gpus[0]?.name.replace(/^NVIDIA\s+/i, '') ?? '?'}
+            {node.driver_version && ` · driver ${node.driver_version}`}
+          </span>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="text-right text-[10px] tabular-nums" style={{ color: 'var(--muted)' }}>
-            <div>
-              {gb(usedMb)} / {gb(totalMb)} GB used
-            </div>
-            <div>{idle} idle</div>
-          </div>
-          <StatusDot status={node.status} detail={node.status === 'online' ? undefined : ago(node.age_s)} />
-          <label className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--ink-2)' }}>
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] tabular-nums" style={{ color: 'var(--muted)' }}>
+            {gb(usedMb)} / {gb(totalMb)} GB · {idle} idle
+          </span>
+          <StatusDot
+            status={node.status}
+            detail={node.status === 'online' ? undefined : ago(node.age_s)}
+          />
+          <label className="flex items-center gap-1.5 text-[10px]" style={{ color: 'var(--ink-2)' }}>
             <span>all dummy</span>
             <Toggle
               checked={allOn}
@@ -72,23 +74,43 @@ export function NodeCard({ node, canControl, pending, onToggleDummy }: NodeCardP
 
       {node.error && (
         <p
-          className="mb-3 rounded px-2 py-1 text-[11px]"
-          style={{ background: 'color-mix(in oklab, var(--warning) 18%, var(--surface-1))', color: 'var(--ink-2)' }}
+          className="px-2.5 py-1 text-[11px]"
+          style={{
+            background: 'color-mix(in oklab, var(--warning) 18%, var(--surface-1))',
+            color: 'var(--ink-2)',
+          }}
         >
           ⚠ {node.error}
         </p>
       )}
 
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-        {node.gpus.map((gpu) => (
-          <GpuCard
-            key={gpu.index}
-            gpu={gpu}
-            canControl={canControl && !dimmed}
-            busy={pending.has(`${node.node_id}:${gpu.index}`)}
-            onToggleDummy={(enabled) => onToggleDummy(gpu.index, enabled)}
-          />
-        ))}
+      {/* The device table has a minimum width to stay aligned; on a narrow embed this
+          block scrolls sideways on its own rather than squashing the columns. */}
+      <div className="overflow-x-auto">
+        <div className="min-w-[42rem]">
+          <div
+            className={`grid ${GPU_GRID} gap-x-2 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide`}
+            style={{ color: 'var(--muted)' }}
+          >
+            <span>Device</span>
+            <span className="col-span-3">Memory / Utilization</span>
+            <span className="text-right">Temp</span>
+            <span className="text-right">Power</span>
+            <span />
+          </div>
+
+          {node.gpus.map((gpu) => (
+            <GpuRow
+              key={gpu.index}
+              gpu={gpu}
+              canControl={canControl && !dimmed}
+              busy={pending.has(`${node.node_id}:${gpu.index}`)}
+              onToggleDummy={(enabled) => onToggleDummy(gpu.index, enabled)}
+            />
+          ))}
+
+          <ProcessTable gpus={node.gpus} />
+        </div>
       </div>
     </section>
   )

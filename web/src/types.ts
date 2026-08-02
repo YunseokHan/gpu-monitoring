@@ -34,6 +34,7 @@ export type NodeStatus = 'online' | 'stale' | 'offline'
 export interface NodeView {
   node_id: string
   node_index: number
+  cluster: string
   hostname: string
   ts: number
   agent_version: string

@@ -49,6 +49,8 @@ class NodeSnapshot(BaseModel):
 
     node_id: str
     node_index: int = 0
+    # Nodes reporting the same cluster name are drawn inside one card on the dashboard.
+    cluster: str = ""
     hostname: str = ""
     ts: float = 0.0
     agent_version: str = ""

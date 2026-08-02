@@ -16,6 +16,7 @@
 #   HUB_URL     hub base URL the agents report to  (default: the live tunnel URL)
 #   TOKEN       hub agent token                    (default: read from the hub state dir)
 #   INDEX_BASE  node number of the first host      (default 1; the hub node is 0)
+#   CLUSTER     draw these hosts as one cluster on the dashboard (default: none)
 
 set -euo pipefail
 
@@ -30,6 +31,7 @@ BRANCH="${BRANCH:-main}"
 HUB_URL="${HUB_URL:-$(cat "$RUN_DIR/tunnel.url" 2>/dev/null || echo '')}"
 TOKEN="${TOKEN:-$(cat "$STATE_DIR/agent_token" 2>/dev/null || echo '')}"
 INDEX_BASE="${INDEX_BASE:-1}"
+CLUSTER="${CLUSTER:-}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
 
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -63,6 +65,7 @@ for host in $HOSTS; do
         --hub-url '$HUB_URL' \
         --token '$TOKEN' \
         --node-index $index \
+        ${CLUSTER:+--cluster '$CLUSTER'} \
         $EXTRA_ARGS
     "; then
     echo

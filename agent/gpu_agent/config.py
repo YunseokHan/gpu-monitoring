@@ -32,6 +32,7 @@ class Config:
     token: str
     node_id: str
     node_index: int
+    cluster: str
     hostname: str
     interval: float
     timeout: float
@@ -56,6 +57,11 @@ def load_config(argv: list[str] | None = None) -> Config:
     parser.add_argument("--token", default=_env("GPU_AGENT_TOKEN"))
     parser.add_argument("--node-id", default=_env("GPU_AGENT_NODE_ID") or hostname)
     parser.add_argument("--node-index", type=int, default=_env_int("GPU_AGENT_NODE_INDEX", 0))
+    parser.add_argument(
+        "--cluster",
+        default=_env("GPU_AGENT_CLUSTER"),
+        help="nodes sharing this name are drawn together as one cluster; blank = standalone",
+    )
     parser.add_argument("--interval", type=float, default=_env_float("GPU_AGENT_INTERVAL", 1.0))
     parser.add_argument("--timeout", type=float, default=_env_float("GPU_AGENT_TIMEOUT", 10.0))
     parser.add_argument(
@@ -98,6 +104,7 @@ def load_config(argv: list[str] | None = None) -> Config:
         token=args.token,
         node_id=args.node_id,
         node_index=args.node_index,
+        cluster=args.cluster.strip(),
         hostname=hostname,
         interval=args.interval,
         timeout=args.timeout,

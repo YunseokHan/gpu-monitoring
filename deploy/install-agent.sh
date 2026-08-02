@@ -30,6 +30,7 @@ HUB_URL="${GPU_AGENT_HUB_URL:-}"
 TOKEN="${GPU_AGENT_TOKEN:-}"
 NODE_ID="${GPU_AGENT_NODE_ID:-$(hostname)}"
 NODE_INDEX="${GPU_AGENT_NODE_INDEX:-0}"
+CLUSTER="${GPU_AGENT_CLUSTER:-}"
 INTERVAL="${GPU_AGENT_INTERVAL:-1.0}"
 HEADROOM_MB="${GPU_AGENT_DUMMY_HEADROOM_MB:-2048}"
 COOLDOWN="${GPU_AGENT_DUMMY_COOLDOWN:-30}"
@@ -50,6 +51,7 @@ Options:
   --token TOKEN        hub agent token                              (required)
   --node-id NAME       stable node identifier      (default: hostname)
   --node-index N       node number shown in the UI (default: 0)
+  --cluster NAME       draw this node inside a cluster card with others sharing the name
   --interval SEC       poll interval               (default: 1.0)
   --headroom-mb MB     VRAM the dummy leaves free  (default: 2048)
   --cooldown SEC       quiet period before re-occupying a freed GPU (default: 30)
@@ -65,6 +67,7 @@ while [ $# -gt 0 ]; do
     --token) TOKEN="$2"; shift 2 ;;
     --node-id) NODE_ID="$2"; shift 2 ;;
     --node-index) NODE_INDEX="$2"; shift 2 ;;
+    --cluster) CLUSTER="$2"; shift 2 ;;
     --interval) INTERVAL="$2"; shift 2 ;;
     --headroom-mb) HEADROOM_MB="$2"; shift 2 ;;
     --cooldown) COOLDOWN="$2"; shift 2 ;;
@@ -175,6 +178,7 @@ GPU_AGENT_HUB_URL=$HUB_URL
 GPU_AGENT_TOKEN=$TOKEN
 GPU_AGENT_NODE_ID=$NODE_ID
 GPU_AGENT_NODE_INDEX=$NODE_INDEX
+GPU_AGENT_CLUSTER=$CLUSTER
 GPU_AGENT_INTERVAL=$INTERVAL
 GPU_AGENT_DUMMY_HEADROOM_MB=$HEADROOM_MB
 GPU_AGENT_DUMMY_COOLDOWN=$COOLDOWN

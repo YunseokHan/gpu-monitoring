@@ -61,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
             payload = {
                 "node_id": config.node_id,
                 "node_index": config.node_index,
+                "cluster": config.cluster,
                 "hostname": config.hostname,
                 "ts": time.time(),
                 "agent_version": __version__,

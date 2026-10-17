@@ -41,6 +41,7 @@ class Config:
     dummy_cooldown: float
     dummy_backend: str
     dummy_target_util: bool
+    monitor_only: bool
     log_level: str
     insecure: bool
 
@@ -90,6 +91,14 @@ def load_config(argv: list[str] | None = None) -> Config:
         default=os.environ.get("GPU_AGENT_DUMMY_NO_UTIL", "") not in ("", "0", "false"),
         help="hold VRAM only, do not burn compute",
     )
+    parser.add_argument(
+        "--monitor-only",
+        action="store_true",
+        default=_env("GPU_AGENT_MONITOR_ONLY", "") not in ("", "0", "false"),
+        help="report GPU state but never run a dummy, whatever the hub asks for. For nodes "
+             "where occupying a GPU outside the scheduler is not ours to do -- a Slurm "
+             "cluster, a reserved machine, anything shared under someone else's rules",
+    )
     parser.add_argument("--log-level", default=_env("GPU_AGENT_LOG_LEVEL", "INFO"))
     parser.add_argument(
         "--insecure",
@@ -113,6 +122,7 @@ def load_config(argv: list[str] | None = None) -> Config:
         dummy_cooldown=args.dummy_cooldown,
         dummy_backend=args.dummy_backend,
         dummy_target_util=not args.dummy_no_util,
+        monitor_only=args.monitor_only,
         log_level=args.log_level.upper(),
         insecure=args.insecure,
     )

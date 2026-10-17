@@ -35,6 +35,7 @@ INTERVAL="${GPU_AGENT_INTERVAL:-1.0}"
 HEADROOM_MB="${GPU_AGENT_DUMMY_HEADROOM_MB:-2048}"
 COOLDOWN="${GPU_AGENT_DUMMY_COOLDOWN:-30}"
 BACKEND="${GPU_AGENT_DUMMY_BACKEND:-auto}"
+MONITOR_ONLY="${GPU_AGENT_MONITOR_ONLY:-0}"
 INSECURE="${GPU_AGENT_INSECURE:-0}"
 START=1
 
@@ -56,6 +57,8 @@ Options:
   --headroom-mb MB     VRAM the dummy leaves free  (default: 2048)
   --cooldown SEC       quiet period before re-occupying a freed GPU (default: 30)
   --backend NAME       dummy backend: auto|cuda|torch (default: auto)
+  --monitor-only       report GPU state but never run a dummy, whatever the hub asks for
+                       (for Slurm/reserved nodes where taking a GPU is not ours to do)
   --insecure           skip TLS verification when talking to the hub
   --no-start           install and configure only, do not start
 EOF
@@ -72,6 +75,7 @@ while [ $# -gt 0 ]; do
     --headroom-mb) HEADROOM_MB="$2"; shift 2 ;;
     --cooldown) COOLDOWN="$2"; shift 2 ;;
     --backend) BACKEND="$2"; shift 2 ;;
+    --monitor-only) MONITOR_ONLY=1; shift ;;
     --insecure) INSECURE=1; shift ;;
     --no-start) START=0; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -183,6 +187,7 @@ GPU_AGENT_INTERVAL=$INTERVAL
 GPU_AGENT_DUMMY_HEADROOM_MB=$HEADROOM_MB
 GPU_AGENT_DUMMY_COOLDOWN=$COOLDOWN
 GPU_AGENT_DUMMY_BACKEND=$BACKEND
+GPU_AGENT_MONITOR_ONLY=$MONITOR_ONLY
 GPU_AGENT_INSECURE=$INSECURE
 GPU_AGENT_LOG_LEVEL=INFO
 EOF

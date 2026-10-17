@@ -43,8 +43,9 @@ def main(argv: list[str] | None = None) -> int:
     client = HubClient(config.ingest_url, config.token, config.timeout, config.insecure)
 
     log.info(
-        "agent %s starting: node_id=%s node_index=%d hub=%s interval=%.1fs",
+        "agent %s starting: node_id=%s node_index=%d hub=%s interval=%.1fs%s",
         __version__, config.node_id, config.node_index, config.ingest_url, config.interval,
+        " monitor-only (dummies disabled)" if config.monitor_only else "",
     )
 
     # Held across ticks so a hub outage does not silently tear down every dummy: we keep
@@ -72,7 +73,9 @@ def main(argv: list[str] | None = None) -> int:
             }
 
             response = client.post_snapshot(payload)
-            if response is not None:
+            # In monitor-only mode the hub's desired state is read but never obeyed, so a
+            # switch flipped in the dashboard cannot put a dummy on this node.
+            if response is not None and not config.monitor_only:
                 desired = {
                     int(index): bool(enabled)
                     for index, enabled in (response.get("desired_dummy") or {}).items()

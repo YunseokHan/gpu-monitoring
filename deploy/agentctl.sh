@@ -76,7 +76,7 @@ cmd_status() {
   fi
   if [ -f "$ENV_FILE" ]; then
     echo "config:"
-    grep -E '^GPU_AGENT_(NODE_ID|NODE_INDEX|HUB_URL|INTERVAL|DUMMY_)' "$ENV_FILE" | sed 's/^/  /'
+    grep -E '^GPU_AGENT_(NODE_ID|NODE_INDEX|HUB_URL|INTERVAL|DUMMY_|MONITOR_ONLY)' "$ENV_FILE" | sed 's/^/  /'
   fi
   echo "dummy workers: $(pgrep -x dummy 2>/dev/null | wc -l)"
   if [ -f "$LOG_FILE" ]; then

@@ -201,6 +201,17 @@ chmod +x "$ROOT/deploy/agentctl.sh" "$ROOT/deploy/_supervise.sh" 2>/dev/null || 
 
 # ------------------------------------------------------------------------- start
 
+# The file we just wrote is the only thing that should configure the agent. We sourced
+# the *previous* one with `set -a` to get defaults, which exported its variables into
+# this shell -- including any the new file deliberately drops. The supervisor sources
+# the file but cannot unset what it does not mention, so a dropped setting would survive
+# in the child's environment with nothing on disk to explain it, until the next restart
+# from a clean shell silently changed the node's behaviour. Clear them here instead.
+for _leaked in $(env | sed -n 's/^\(GPU_AGENT_[A-Za-z0-9_]*\)=.*/\1/p'); do
+  # RUN_DIR is an external override, never written to the env file; keep it.
+  [ "$_leaked" = "GPU_AGENT_RUN_DIR" ] || unset "$_leaked"
+done
+
 if [ "$START" = "1" ]; then
   "$ROOT/deploy/agentctl.sh" restart
   sleep 3

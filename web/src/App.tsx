@@ -171,10 +171,24 @@ export default function App() {
       {/* Two node cards per row once there is room for both device tables; one column
           below that, which is what a phone and a Notion embed get.
 
-          Standalone nodes are drawn together first so they pair up. Interleaving them
-          with the full-width cluster cards in node order would leave a hole beside every
-          standalone node that happens to sit next to a cluster. */}
+          Cluster cards span the full width, so they go first and the standalone nodes
+          pack together underneath. Interleaving the two in node order would leave a hole
+          beside every standalone node that happens to sit next to a cluster, and putting
+          the standalone grid first buries the newest node above the cluster cards -- this
+          way the highest-numbered node, which is the one most recently added, is the last
+          card on the page. */}
       <div className="space-y-2.5">
+        {clusters.map((group) => (
+          <ClusterCard
+            key={group.key}
+            name={group.cluster!}
+            nodes={group.nodes}
+            canControl={canControl}
+            pending={pending}
+            onToggleDummy={toggleDummy}
+          />
+        ))}
+
         {solo.length > 0 && (
           <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
             {solo.map((group) => (
@@ -190,17 +204,6 @@ export default function App() {
             ))}
           </div>
         )}
-
-        {clusters.map((group) => (
-          <ClusterCard
-            key={group.key}
-            name={group.cluster!}
-            nodes={group.nodes}
-            canControl={canControl}
-            pending={pending}
-            onToggleDummy={toggleDummy}
-          />
-        ))}
       </div>
     </div>
   )

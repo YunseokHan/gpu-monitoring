@@ -59,6 +59,8 @@ Options:
   --backend NAME       dummy backend: auto|cuda|torch (default: auto)
   --monitor-only       report GPU state but never run a dummy, whatever the hub asks for
                        (for Slurm/reserved nodes where taking a GPU is not ours to do)
+  --allow-dummies      undo --monitor-only: obey the hub again. Needed because these
+                       settings persist in agent.env across re-runs
   --insecure           skip TLS verification when talking to the hub
   --no-start           install and configure only, do not start
 EOF
@@ -76,6 +78,7 @@ while [ $# -gt 0 ]; do
     --cooldown) COOLDOWN="$2"; shift 2 ;;
     --backend) BACKEND="$2"; shift 2 ;;
     --monitor-only) MONITOR_ONLY=1; shift ;;
+    --allow-dummies) MONITOR_ONLY=0; shift ;;
     --insecure) INSECURE=1; shift ;;
     --no-start) START=0; shift ;;
     -h|--help) usage; exit 0 ;;

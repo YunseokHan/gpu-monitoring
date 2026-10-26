@@ -37,6 +37,30 @@ function groupNodes(nodes: NodeView[]): Group[] {
   return groups
 }
 
+/**
+ * The order the cards are drawn in, named by cluster or by node id.
+ *
+ * Which machines the lab wants to see first is a human decision -- it does not follow
+ * from the node numbers, which only record the order the agents were deployed in -- so
+ * it is a list rather than a rule. A cluster card spans both columns, so this order
+ * decides the row breaks too: the four standalone nodes pair up into two rows, then
+ * kakao-b200 takes a row of its own, then gpusystem starts the last one.
+ *
+ * A group missing from the list is drawn after it in node order, so deploying an agent
+ * on a new machine shows the node -- at the bottom -- without this file being edited
+ * first; move its name in here once you know where you want it.
+ */
+const CARD_ORDER = ['aidas', 'dskna001', 'ARPA-NHN-2', 'IPAI-H200', 'kakao-b200', 'gpusystem']
+
+function orderGroups(groups: Group[]): Group[] {
+  const rank = (group: Group) => {
+    const at = CARD_ORDER.indexOf(group.cluster ?? group.nodes[0].node_id)
+    return at === -1 ? CARD_ORDER.length : at
+  }
+  // Array.sort is stable, which is what keeps unlisted groups in the hub's node order.
+  return [...groups].sort((a, b) => rank(a) - rank(b))
+}
+
 export default function App() {
   const { state, connected, staleness, transport } = useStream()
   const [pending, setPending] = useState<Set<string>>(new Set())
@@ -82,9 +106,7 @@ export default function App() {
     }
   }, [state])
 
-  const groups = useMemo(() => groupNodes(state?.nodes ?? []), [state])
-  const solo = useMemo(() => groups.filter((g) => !g.cluster), [groups])
-  const clusters = useMemo(() => groups.filter((g) => g.cluster), [groups])
+  const groups = useMemo(() => orderGroups(groupNodes(state?.nodes ?? [])), [state])
   const live = connected && staleness < STALE_AFTER_S
 
   return (
@@ -168,41 +190,37 @@ export default function App() {
         </p>
       )}
 
-      {/* Two node cards per row once there is room for both device tables; one column
-          below that, which is what a phone and a Notion embed get.
+      {/* Two cards per row once there is room for both device tables; one column below
+          that, which is what a phone and a Notion embed get.
 
-          Cluster cards span the full width, so they go first and the standalone nodes
-          pack together underneath. Interleaving the two in node order would leave a hole
-          beside every standalone node that happens to sit next to a cluster, and putting
-          the standalone grid first buries the newest node above the cluster cards -- this
-          way the highest-numbered node, which is the one most recently added, is the last
-          card on the page. */}
-      <div className="space-y-2.5">
-        {clusters.map((group) => (
-          <ClusterCard
-            key={group.key}
-            name={group.cluster!}
-            nodes={group.nodes}
-            canControl={canControl}
-            pending={pending}
-            onToggleDummy={toggleDummy}
-          />
-        ))}
-
-        {solo.length > 0 && (
-          <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
-            {solo.map((group) => (
-              <NodeCard
-                key={group.key}
-                node={group.nodes[0]}
+          Clusters and standalone nodes share one grid so that CARD_ORDER alone decides
+          the layout. A cluster card spans both columns, which means it always starts a
+          fresh row: put one after an odd number of standalone nodes and the node beside
+          it is left with a hole, so the order above pairs the standalone nodes up first
+          and lets the cluster break the rows where it is wanted. */}
+      <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
+        {groups.map((group) =>
+          group.cluster ? (
+            <div key={group.key} className="xl:col-span-2">
+              <ClusterCard
+                name={group.cluster}
+                nodes={group.nodes}
                 canControl={canControl}
                 pending={pending}
-                onToggleDummy={(gpuIndex, enabled) =>
-                  toggleDummy(group.nodes[0].node_id, gpuIndex, enabled)
-                }
+                onToggleDummy={toggleDummy}
               />
-            ))}
-          </div>
+            </div>
+          ) : (
+            <NodeCard
+              key={group.key}
+              node={group.nodes[0]}
+              canControl={canControl}
+              pending={pending}
+              onToggleDummy={(gpuIndex, enabled) =>
+                toggleDummy(group.nodes[0].node_id, gpuIndex, enabled)
+              }
+            />
+          ),
         )}
       </div>
     </div>

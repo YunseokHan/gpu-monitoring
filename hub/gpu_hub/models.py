@@ -85,7 +85,11 @@ class QuotaReport(BaseModel):
     the two, so the dashboard can show both without the collector rounding anything.
     """
 
+    # The key the hub stores reports under, and the name the dashboard shows. One site
+    # can carry several contracts (hangang has an ARPA and a Robot account), each with
+    # its own collector, so the key names the contract and the label says which it is.
     cluster: str
+    label: str = ""
     account: str = ""
     source: str = ""
     unit: Literal["node", "gpu"] = "node"

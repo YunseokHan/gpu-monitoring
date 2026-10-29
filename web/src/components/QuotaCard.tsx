@@ -50,7 +50,7 @@ export function QuotaCard({ quota }: { quota: QuotaView }) {
       >
         <div className="flex min-w-0 items-baseline gap-2">
           <h3 className="truncate text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>
-            {quota.cluster}
+            {quota.label || quota.cluster}
           </h3>
           <span className="truncate text-[10px]" style={{ color: 'var(--muted)' }}>
             Slurm quota · {quota.account}

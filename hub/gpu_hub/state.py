@@ -118,6 +118,10 @@ class Store:
         quotas: list[QuotaView] = []
         for cluster, report in sorted(self._quotas.items()):
             age = now - self._quota_seen.get(cluster, 0.0)
+            # Same rule as nodes: a collector that has been retired or renamed drops off
+            # the dashboard after a day instead of lingering as an offline card forever.
+            if age > self.config.forget_after:
+                continue
             if age > QUOTA_OFFLINE_AFTER:
                 status = "offline"
             elif age > QUOTA_STALE_AFTER:

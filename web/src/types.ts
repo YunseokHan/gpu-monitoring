@@ -54,6 +54,7 @@ export interface QuotaUser {
 /** A Slurm site's allocation. Seconds are as the site reports them; `unit` says of what. */
 export interface QuotaView {
   cluster: string
+  label: string
   account: string
   source: string
   unit: 'node' | 'gpu'

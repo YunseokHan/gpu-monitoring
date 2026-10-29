@@ -150,6 +150,7 @@ def main():
 
     report = {
         "cluster": env.get("GPU_QUOTA_CLUSTER", "slurm"),
+        "label": env.get("GPU_QUOTA_LABEL", ""),
         "source": "KISTI ISAM",
         "unit": env.get("GPU_QUOTA_UNIT", "node"),
         "gpus_per_node": int(env.get("GPU_QUOTA_GPUS_PER_NODE", "1")),

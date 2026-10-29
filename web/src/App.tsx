@@ -50,7 +50,8 @@ function groupNodes(nodes: NodeView[]): Group[] {
  * from the node numbers, which only record the order the agents were deployed in -- so
  * it is a list rather than a rule. A cluster card spans both columns, so this order
  * decides the row breaks too: the four standalone nodes pair up into two rows, then
- * kakao-b200 takes a row of its own, then gpusystem and the hangang quota share the last.
+ * kakao-b200 takes a row of its own, then the two hangang contracts (quota cards, keyed
+ * by their collector's GPU_QUOTA_CLUSTER), then gpusystem.
  *
  * A group missing from the list is drawn after it in node order, so deploying an agent
  * on a new machine shows the node -- at the bottom -- without this file being edited
@@ -62,13 +63,25 @@ const CARD_ORDER = [
   'ARPA-NHN-2',
   'IPAI-H200',
   'kakao-b200',
+  'hangang-arpa',
+  'hangang-robot',
   'gpusystem',
-  'hangang',
 ]
+
+/**
+ * Cards that always start a new row on the two-column layout. gpusystem goes below the
+ * hangang pair even while one of the pair has no collector yet, instead of sliding up
+ * into its empty slot and moving again the day it is installed.
+ */
+const NEW_ROW = new Set(['gpusystem'])
+
+function cardName(card: Card): string {
+  return 'quota' in card ? card.cluster : card.cluster ?? card.nodes[0].node_id
+}
 
 function orderCards(cards: Card[]): Card[] {
   const rank = (card: Card) => {
-    const at = CARD_ORDER.indexOf('quota' in card ? card.cluster : card.cluster ?? card.nodes[0].node_id)
+    const at = CARD_ORDER.indexOf(cardName(card))
     return at === -1 ? CARD_ORDER.length : at
   }
   // Array.sort is stable, which is what keeps unlisted groups in the hub's node order.
@@ -220,11 +233,11 @@ export default function App() {
           it is left with a hole, so the order above pairs the standalone nodes up first
           and lets the cluster break the rows where it is wanted. */}
       <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
-        {cards.map((group) =>
-          'quota' in group ? (
-            <QuotaCard key={group.key} quota={group.quota} />
-          ) : group.cluster ? (
-            <div key={group.key} className="xl:col-span-2">
+        {cards.map((group) => {
+          const card =
+            'quota' in group ? (
+              <QuotaCard quota={group.quota} />
+            ) : group.cluster ? (
               <ClusterCard
                 name={group.cluster}
                 nodes={group.nodes}
@@ -232,19 +245,26 @@ export default function App() {
                 pending={pending}
                 onToggleDummy={toggleDummy}
               />
+            ) : (
+              <NodeCard
+                node={group.nodes[0]}
+                canControl={canControl}
+                pending={pending}
+                onToggleDummy={(gpuIndex, enabled) =>
+                  toggleDummy(group.nodes[0].node_id, gpuIndex, enabled)
+                }
+              />
+            )
+          // The wrapper is a grid of one so the card still stretches to the height of
+          // the card beside it, as it would as a direct child.
+          const span = 'quota' in group || !group.cluster ? '' : 'xl:col-span-2'
+          const start = NEW_ROW.has(cardName(group)) ? 'xl:col-start-1' : ''
+          return (
+            <div key={group.key} className={`grid ${span} ${start}`}>
+              {card}
             </div>
-          ) : (
-            <NodeCard
-              key={group.key}
-              node={group.nodes[0]}
-              canControl={canControl}
-              pending={pending}
-              onToggleDummy={(gpuIndex, enabled) =>
-                toggleDummy(group.nodes[0].node_id, gpuIndex, enabled)
-              }
-            />
-          ),
-        )}
+          )
+        })}
       </div>
     </div>
   )

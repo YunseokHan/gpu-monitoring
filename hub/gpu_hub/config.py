@@ -75,5 +75,9 @@ class Config:
     def desired_state_file(self) -> Path:
         return self.state_dir / "desired_dummy.json"
 
+    @property
+    def quota_state_file(self) -> Path:
+        return self.state_dir / "quota.json"
+
 
 config = Config()

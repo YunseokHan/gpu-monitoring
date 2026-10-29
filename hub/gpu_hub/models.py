@@ -68,9 +68,49 @@ class NodeView(NodeSnapshot):
     age_s: float = 0.0
 
 
+class QuotaUser(BaseModel):
+    user: str
+    used_s: float = 0.0
+
+
+class QuotaReport(BaseModel):
+    """A Slurm site's allocation, as its accounting system reports it.
+
+    Sent by the quota collector (agent/quota_collector.py) every few minutes rather than
+    every second: the numbers come from the site's own accounting service, which updates
+    about once a day, and polling it or Slurm any harder only gets in other users' way.
+
+    Seconds are kept exactly as the site reports them. ``unit`` says what one of those
+    seconds is -- a whole node or a single GPU -- and ``gpus_per_node`` converts between
+    the two, so the dashboard can show both without the collector rounding anything.
+    """
+
+    cluster: str
+    account: str = ""
+    source: str = ""
+    unit: Literal["node", "gpu"] = "node"
+    gpus_per_node: int = 1
+    period_start: str = ""
+    period_end: str = ""
+    contract_s: float = 0.0
+    used_s: float = 0.0
+    users: list[QuotaUser] = Field(default_factory=list)
+    # When the collector last ran, and when the accounting service last answered it. A
+    # failed read keeps the previous figures with an error, so the two can differ.
+    ts: float = 0.0
+    source_ts: Optional[float] = None
+    error: Optional[str] = None
+
+
+class QuotaView(QuotaReport):
+    status: Literal["online", "stale", "offline"] = "online"
+    age_s: float = 0.0
+
+
 class ClusterState(BaseModel):
     ts: float
     nodes: list[NodeView] = Field(default_factory=list)
+    quotas: list[QuotaView] = Field(default_factory=list)
 
 
 class IngestResponse(BaseModel):

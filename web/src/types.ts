@@ -46,7 +46,32 @@ export interface NodeView {
   age_s: number
 }
 
+export interface QuotaUser {
+  user: string
+  used_s: number
+}
+
+/** A Slurm site's allocation. Seconds are as the site reports them; `unit` says of what. */
+export interface QuotaView {
+  cluster: string
+  account: string
+  source: string
+  unit: 'node' | 'gpu'
+  gpus_per_node: number
+  period_start: string
+  period_end: string
+  contract_s: number
+  used_s: number
+  users: QuotaUser[]
+  ts: number
+  source_ts: number | null
+  error: string | null
+  status: NodeStatus
+  age_s: number
+}
+
 export interface ClusterState {
   ts: number
   nodes: NodeView[]
+  quotas: QuotaView[]
 }

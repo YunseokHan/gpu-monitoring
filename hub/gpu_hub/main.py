@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .config import config
-from .models import ClusterState, DummyControl, IngestResponse, NodeSnapshot
+from .models import ClusterState, DummyControl, IngestResponse, NodeSnapshot, QuotaReport
 from .state import Store
 from .stream import Broadcaster
 
@@ -74,6 +74,12 @@ def require_control(x_control_token: str = Header(default="")) -> None:
 async def ingest(snapshot: NodeSnapshot) -> IngestResponse:
     desired = store.ingest(snapshot)
     return IngestResponse(desired_dummy=desired, server_ts=time.time())
+
+
+@app.post("/api/v1/quota", dependencies=[Depends(require_agent)])
+async def ingest_quota(report: QuotaReport) -> dict:
+    store.ingest_quota(report)
+    return {"cluster": report.cluster, "server_ts": time.time()}
 
 
 # -------------------------------------------------------------------- api: viewers

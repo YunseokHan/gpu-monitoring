@@ -15,9 +15,14 @@ import time
 from pathlib import Path
 
 from .config import Config
-from .models import ClusterState, NodeSnapshot, NodeView
+from .models import ClusterState, NodeSnapshot, NodeView, QuotaReport, QuotaView
 
 log = logging.getLogger(__name__)
+
+# The quota collector runs from cron every 10 minutes, so its liveness is measured in
+# missed runs rather than the seconds a GPU agent is held to.
+QUOTA_STALE_AFTER = 25 * 60.0
+QUOTA_OFFLINE_AFTER = 60 * 60.0
 
 
 class Store:
@@ -28,6 +33,11 @@ class Store:
         # node_id -> {gpu_index: enabled}
         self._desired: dict[str, dict[int, bool]] = {}
         self._load_desired()
+        # cluster -> latest report. Persisted, because a report only arrives every ten
+        # minutes and a hub restart should not blank the card until the next one.
+        self._quotas: dict[str, QuotaReport] = {}
+        self._quota_seen: dict[str, float] = {}
+        self._load_quotas()
 
     # ------------------------------------------------------------------ ingest
 
@@ -42,6 +52,12 @@ class Store:
             node_desired.setdefault(gpu.index, False)
 
         return self.desired_for(snapshot.node_id)
+
+    def ingest_quota(self, report: QuotaReport) -> None:
+        now = time.time()
+        self._quotas[report.cluster] = report
+        self._quota_seen[report.cluster] = now
+        self._save_quotas()
 
     def desired_for(self, node_id: str) -> dict[str, bool]:
         return {str(idx): enabled for idx, enabled in self._desired.get(node_id, {}).items()}
@@ -98,7 +114,19 @@ class Store:
 
         # Stable, human-friendly ordering: node number first, then name.
         nodes.sort(key=lambda n: (n.node_index, n.node_id))
-        return ClusterState(ts=now, nodes=nodes)
+
+        quotas: list[QuotaView] = []
+        for cluster, report in sorted(self._quotas.items()):
+            age = now - self._quota_seen.get(cluster, 0.0)
+            if age > QUOTA_OFFLINE_AFTER:
+                status = "offline"
+            elif age > QUOTA_STALE_AFTER:
+                status = "stale"
+            else:
+                status = "online"
+            quotas.append(QuotaView(**report.model_dump(), status=status, age_s=round(age, 1)))
+
+        return ClusterState(ts=now, nodes=nodes, quotas=quotas)
 
     # ------------------------------------------------------------- persistence
 
@@ -128,3 +156,30 @@ class Store:
             os.replace(tmp, path)
         except Exception:
             log.exception("could not persist desired dummy state to %s", path)
+
+    def _load_quotas(self) -> None:
+        path = self.config.quota_state_file
+        if not path.exists():
+            return
+        try:
+            raw = json.loads(path.read_text())
+            for entry in raw.values():
+                report = QuotaReport(**entry["report"])
+                self._quotas[report.cluster] = report
+                self._quota_seen[report.cluster] = float(entry["seen"])
+            log.info("loaded quota reports for %d cluster(s) from %s", len(self._quotas), path)
+        except Exception:
+            log.exception("could not read %s, starting without quota reports", path)
+
+    def _save_quotas(self) -> None:
+        path: Path = self.config.quota_state_file
+        payload = {
+            cluster: {"report": report.model_dump(), "seen": self._quota_seen[cluster]}
+            for cluster, report in self._quotas.items()
+        }
+        tmp = path.with_suffix(".json.tmp")
+        try:
+            tmp.write_text(json.dumps(payload, indent=2, sort_keys=True))
+            os.replace(tmp, path)
+        except Exception:
+            log.exception("could not persist quota reports to %s", path)

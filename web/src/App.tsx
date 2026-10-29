@@ -2,16 +2,22 @@ import { useCallback, useMemo, useState } from 'react'
 import { ControlError, controlToken, setDummy } from './api'
 import { ClusterCard } from './components/ClusterCard'
 import { NodeCard } from './components/NodeCard'
+import { QuotaCard } from './components/QuotaCard'
 import { ThemeToggle } from './components/ThemeToggle'
 import { useStream } from './useStream'
 import { gb } from './format'
 import { applyTheme, initialTheme, type ThemeMode } from './theme'
-import type { NodeView } from './types'
+import type { NodeView, QuotaView } from './types'
 
 /** Frames older than this mean the tunnel or the hub dropped out. */
 const STALE_AFTER_S = 4
 
 type Group = { key: string; cluster: string | null; nodes: NodeView[] }
+
+/** A Slurm site seen only through its accounting: a quota card instead of devices. */
+type QuotaGroup = { key: string; cluster: string; quota: QuotaView }
+
+type Card = Group | QuotaGroup
 
 /** Nodes sharing a cluster name collapse into one group; the rest stand alone. */
 function groupNodes(nodes: NodeView[]): Group[] {
@@ -44,21 +50,29 @@ function groupNodes(nodes: NodeView[]): Group[] {
  * from the node numbers, which only record the order the agents were deployed in -- so
  * it is a list rather than a rule. A cluster card spans both columns, so this order
  * decides the row breaks too: the four standalone nodes pair up into two rows, then
- * kakao-b200 takes a row of its own, then gpusystem starts the last one.
+ * kakao-b200 takes a row of its own, then gpusystem and the hangang quota share the last.
  *
  * A group missing from the list is drawn after it in node order, so deploying an agent
  * on a new machine shows the node -- at the bottom -- without this file being edited
  * first; move its name in here once you know where you want it.
  */
-const CARD_ORDER = ['aidas', 'dskna001', 'ARPA-NHN-2', 'IPAI-H200', 'kakao-b200', 'gpusystem']
+const CARD_ORDER = [
+  'aidas',
+  'dskna001',
+  'ARPA-NHN-2',
+  'IPAI-H200',
+  'kakao-b200',
+  'gpusystem',
+  'hangang',
+]
 
-function orderGroups(groups: Group[]): Group[] {
-  const rank = (group: Group) => {
-    const at = CARD_ORDER.indexOf(group.cluster ?? group.nodes[0].node_id)
+function orderCards(cards: Card[]): Card[] {
+  const rank = (card: Card) => {
+    const at = CARD_ORDER.indexOf('quota' in card ? card.cluster : card.cluster ?? card.nodes[0].node_id)
     return at === -1 ? CARD_ORDER.length : at
   }
   // Array.sort is stable, which is what keeps unlisted groups in the hub's node order.
-  return [...groups].sort((a, b) => rank(a) - rank(b))
+  return [...cards].sort((a, b) => rank(a) - rank(b))
 }
 
 export default function App() {
@@ -106,7 +120,14 @@ export default function App() {
     }
   }, [state])
 
-  const groups = useMemo(() => orderGroups(groupNodes(state?.nodes ?? [])), [state])
+  const cards = useMemo(() => {
+    const quotas: QuotaGroup[] = (state?.quotas ?? []).map((quota) => ({
+      key: `quota:${quota.cluster}`,
+      cluster: quota.cluster,
+      quota,
+    }))
+    return orderCards([...groupNodes(state?.nodes ?? []), ...quotas])
+  }, [state])
   const live = connected && staleness < STALE_AFTER_S
 
   return (
@@ -184,7 +205,7 @@ export default function App() {
         </p>
       )}
 
-      {state && state.nodes.length === 0 && (
+      {state && state.nodes.length === 0 && !state.quotas?.length && (
         <p className="py-10 text-center text-sm" style={{ color: 'var(--muted)' }}>
           No agents have reported yet.
         </p>
@@ -199,8 +220,10 @@ export default function App() {
           it is left with a hole, so the order above pairs the standalone nodes up first
           and lets the cluster break the rows where it is wanted. */}
       <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
-        {groups.map((group) =>
-          group.cluster ? (
+        {cards.map((group) =>
+          'quota' in group ? (
+            <QuotaCard key={group.key} quota={group.quota} />
+          ) : group.cluster ? (
             <div key={group.key} className="xl:col-span-2">
               <ClusterCard
                 name={group.cluster}

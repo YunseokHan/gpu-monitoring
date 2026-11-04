@@ -70,7 +70,12 @@ class NodeView(NodeSnapshot):
 
 class QuotaUser(BaseModel):
     user: str
+    # Billed so far, in the site's seconds (ISAM's SRU-Time).
     used_s: float = 0.0
+    # Run but not billed yet, in the same seconds: jobs that ended today plus running
+    # jobs' time so far. ISAM adds a job whole on the day after it ends.
+    pending_s: float = 0.0
+    running_gpus: int = 0
 
 
 class QuotaReport(BaseModel):
@@ -80,9 +85,10 @@ class QuotaReport(BaseModel):
     every second: the numbers come from the site's own accounting service, which updates
     about once a day, and polling it or Slurm any harder only gets in other users' way.
 
-    Seconds are kept exactly as the site reports them. ``unit`` says what one of those
-    seconds is -- a whole node or a single GPU -- and ``gpus_per_node`` converts between
-    the two, so the dashboard can show both without the collector rounding anything.
+    Seconds are kept exactly as the site reports them, so the dashboard can show the
+    site's own figure. ``unit`` and ``node_s_per_unit`` say how much machine one of those
+    seconds is -- on KISTI hangang one SRU second is three node-seconds, measured against
+    sacct job by job -- and ``gpus_per_node`` takes node-hours on to GPU-hours.
     """
 
     # The key the hub stores reports under, and the name the dashboard shows. One site
@@ -93,12 +99,16 @@ class QuotaReport(BaseModel):
     account: str = ""
     source: str = ""
     unit: Literal["node", "gpu"] = "node"
+    node_s_per_unit: float = 1.0
     gpus_per_node: int = 1
     period_start: str = ""
     period_end: str = ""
     contract_s: float = 0.0
     used_s: float = 0.0
     users: list[QuotaUser] = Field(default_factory=list)
+    # Sum of the users' pending_s, and why it could not be worked out if it could not.
+    pending_s: float = 0.0
+    pending_error: Optional[str] = None
     # When the collector last ran, and when the accounting service last answered it. A
     # failed read keeps the previous figures with an error, so the two can differ.
     ts: float = 0.0

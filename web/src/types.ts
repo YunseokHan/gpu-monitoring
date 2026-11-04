@@ -49,6 +49,8 @@ export interface NodeView {
 export interface QuotaUser {
   user: string
   used_s: number
+  pending_s?: number
+  running_gpus?: number
 }
 
 /** A Slurm site's allocation. Seconds are as the site reports them; `unit` says of what. */
@@ -58,12 +60,15 @@ export interface QuotaView {
   account: string
   source: string
   unit: 'node' | 'gpu'
+  node_s_per_unit: number
   gpus_per_node: number
   period_start: string
   period_end: string
   contract_s: number
   used_s: number
   users: QuotaUser[]
+  pending_s: number
+  pending_error: string | null
   ts: number
   source_ts: number | null
   error: string | null

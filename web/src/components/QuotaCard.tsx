@@ -2,8 +2,8 @@ import type { QuotaView } from '../types'
 import { ago, pct } from '../format'
 import { StatusDot } from './StatusDot'
 
-/** Hours with one decimal below 100, whole hours above, and thousands separators. */
-function hours(value: number): string {
+/** One decimal below 100, whole numbers above, with thousands separators. */
+function num(value: number): string {
   return value.toLocaleString('en-US', { maximumFractionDigits: value < 100 ? 1 : 0 })
 }
 
@@ -15,25 +15,33 @@ function daysLeft(periodEnd: string): number | null {
 }
 
 /**
- * A Slurm site we can only see through its accounting service: no device table, just
- * how much of the allocation the group has used, and by whom.
+ * A Slurm site we can only see through its accounting: no device table, just how much
+ * of the contract the group has used, and by whom.
  *
- * The figures are the site's own, which update about once a day, so the card says when
- * they are from instead of pretending to be live.
+ * The contract is kept in the site's own unit (ISAM's SRU-Time seconds), shown as is so
+ * it can be checked against `isam`, and in GPU-hours next to it because that is the
+ * figure people can reason about. ISAM bills a job the day after it ends, so what has
+ * run since -- estimated from Slurm by the collector -- is shown on top, marked as such.
  */
 export function QuotaCard({ quota }: { quota: QuotaView }) {
-  // Everything is shown in both node-hours (what the contract is written in) and
-  // GPU-hours (what people think in), converted from the site's seconds.
-  const perNode = quota.unit === 'node' ? quota.gpus_per_node : 1
-  const nodeH = (s: number) => s / 3600 / (quota.unit === 'node' ? 1 : quota.gpus_per_node)
-  const gpuH = (s: number) => (s / 3600) * perNode
+  const perUnitGpuS =
+    (quota.node_s_per_unit || 1) * (quota.unit === 'node' ? quota.gpus_per_node : 1)
+  const gpuH = (s: number) => (s * perUnitGpuS) / 3600
+  const nodeH = (s: number) => gpuH(s) / Math.max(1, quota.gpus_per_node)
 
   const used = quota.used_s
-  const left = Math.max(0, quota.contract_s - used)
-  const usedPct = pct(used, quota.contract_s)
+  const pending = quota.pending_s ?? 0
+  const total = quota.contract_s
+  const left = Math.max(0, total - used - pending)
+  const usedPct = pct(used, total)
+  const pendingPct = Math.min(100 - usedPct, pct(pending, total))
   const remaining = daysLeft(quota.period_end)
-  const users = [...quota.users].sort((a, b) => b.used_s - a.used_s)
+  const users = [...quota.users].sort(
+    (a, b) => b.used_s + (b.pending_s ?? 0) - (a.used_s + (a.pending_s ?? 0)),
+  )
+  const anyRunning = users.some((u) => (u.running_gpus ?? 0) > 0)
   const dimmed = quota.status === 'offline'
+  const fill = usedPct + pendingPct >= 90 ? 'var(--critical)' : usedPct + pendingPct >= 75 ? 'var(--warning)' : 'var(--util)'
 
   return (
     <section
@@ -71,65 +79,83 @@ export function QuotaCard({ quota }: { quota: QuotaView }) {
         </div>
       </header>
 
-      {quota.error && (
+      {[quota.error, quota.pending_error].filter(Boolean).map((message) => (
         <p
+          key={message}
           className="px-2.5 py-1 text-[11px]"
           style={{
             background: 'color-mix(in oklab, var(--warning) 18%, var(--surface-1))',
             color: 'var(--ink-2)',
           }}
         >
-          ⚠ {quota.error}
+          ⚠ {message}
         </p>
-      )}
+      ))}
 
       <div className="space-y-2 px-2.5 py-2">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
           <span className="text-[13px] tabular-nums" style={{ color: 'var(--ink)' }}>
-            <span className="font-semibold">{hours(gpuH(left))}</span>
+            <span className="font-semibold">≈ {num(gpuH(left))}</span>
             <span style={{ color: 'var(--ink-2)' }}> GPU·h left</span>
             <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
               {' '}
-              ({hours(nodeH(left))} node·h)
+              ({num(nodeH(left))} node·h)
             </span>
           </span>
           <span className="text-[11px] tabular-nums" style={{ color: 'var(--ink-2)' }}>
-            used {hours(gpuH(used))} / {hours(gpuH(quota.contract_s))} GPU·h ·{' '}
-            {usedPct.toFixed(usedPct < 10 ? 1 : 0)}%
+            {(usedPct + pendingPct).toFixed(usedPct + pendingPct < 10 ? 1 : 0)}% used
           </span>
         </div>
 
         <div
-          className="h-2 overflow-hidden rounded-full"
+          className="flex h-2 overflow-hidden rounded-full"
           style={{ background: 'var(--grid)' }}
           role="meter"
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuenow={Math.round(usedPct)}
-          aria-label={`${quota.cluster} quota used`}
+          aria-valuenow={Math.round(usedPct + pendingPct)}
+          aria-label={`${quota.label || quota.cluster} quota used`}
         >
+          <div className="h-full" style={{ width: `${usedPct}%`, background: fill }} />
           <div
-            className="h-full rounded-full"
-            style={{
-              width: `${usedPct}%`,
-              background: usedPct >= 90 ? 'var(--critical)' : usedPct >= 75 ? 'var(--warning)' : 'var(--util)',
-            }}
+            className="h-full"
+            style={{ width: `${pendingPct}%`, background: fill, opacity: 0.45 }}
+            title="run since ISAM last billed (estimated)"
           />
         </div>
+
+        {/* The site's figure first, exactly as `isam` prints it, then the same in GPU-hours. */}
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px] tabular-nums">
+          <dt style={{ color: 'var(--muted)' }}>SRU-Time</dt>
+          <dd style={{ color: 'var(--ink)' }}>
+            <span className="font-semibold">{used.toLocaleString('en-US')} s</span>
+            {pending > 0 && (
+              <span style={{ color: 'var(--ink-2)' }}> + ~{Math.round(pending).toLocaleString('en-US')} s today</span>
+            )}
+            <span style={{ color: 'var(--muted)' }}> / {total.toLocaleString('en-US')} s</span>
+          </dd>
+          <dt style={{ color: 'var(--muted)' }}>GPU·h</dt>
+          <dd style={{ color: 'var(--ink)' }}>
+            <span className="font-semibold">{num(gpuH(used))}</span>
+            {pending > 0 && <span style={{ color: 'var(--ink-2)' }}> + ~{num(gpuH(pending))} today</span>}
+            <span style={{ color: 'var(--muted)' }}> / {num(gpuH(total))} GPU·h</span>
+          </dd>
+        </dl>
 
         <table className="w-full text-[11px] tabular-nums">
           <thead>
             <tr className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
               <th className="py-0.5 text-left font-semibold">User</th>
+              <th className="py-0.5 text-right font-semibold">SRU-Time s</th>
               <th className="py-0.5 text-right font-semibold">GPU·h</th>
-              <th className="py-0.5 text-right font-semibold">node·h</th>
-              <th className="py-0.5 text-right font-semibold">Share</th>
+              <th className="py-0.5 text-right font-semibold">+ today</th>
+              {anyRunning && <th className="py-0.5 text-right font-semibold">Now</th>}
             </tr>
           </thead>
           <tbody>
             {users.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-1" style={{ color: 'var(--muted)' }}>
+                <td colSpan={5} className="py-1" style={{ color: 'var(--muted)' }}>
                   No usage recorded yet.
                 </td>
               </tr>
@@ -139,24 +165,31 @@ export function QuotaCard({ quota }: { quota: QuotaView }) {
                 <td className="py-0.5" style={{ color: 'var(--ink)' }}>
                   {user.user}
                 </td>
+                <td className="py-0.5 text-right" style={{ color: 'var(--ink-2)' }}>
+                  {user.used_s.toLocaleString('en-US')}
+                </td>
                 <td className="py-0.5 text-right" style={{ color: 'var(--ink)' }}>
-                  {hours(gpuH(user.used_s))}
+                  {num(gpuH(user.used_s))}
                 </td>
                 <td className="py-0.5 text-right" style={{ color: 'var(--ink-2)' }}>
-                  {hours(nodeH(user.used_s))}
+                  {user.pending_s ? `~${num(gpuH(user.pending_s))}` : '–'}
                 </td>
-                <td className="py-0.5 text-right" style={{ color: 'var(--ink-2)' }}>
-                  {used > 0 ? `${((user.used_s / used) * 100).toFixed(0)}%` : '–'}
-                </td>
+                {anyRunning && (
+                  <td className="py-0.5 text-right" style={{ color: 'var(--ink-2)' }}>
+                    {user.running_gpus ? `${user.running_gpus} GPU` : '–'}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
 
-        <p className="text-[10px]" style={{ color: 'var(--muted)' }}>
-          {quota.source || 'site accounting'}
-          {quota.source_ts ? `, read ${ago(Date.now() / 1000 - quota.source_ts)}` : ''}
-          {' · the site counts usage through the previous day, so today’s jobs show up tomorrow'}
+        <p className="text-[10px] leading-snug" style={{ color: 'var(--muted)' }}>
+          SRU-Time is {quota.source || 'the site'}’s billed figure
+          {quota.source_ts ? ` (read ${ago(Date.now() / 1000 - quota.source_ts)})` : ''}. ISAM adds a
+          job only the day after it ends, so jobs that ended today and running jobs show
+          up there tomorrow; “today” estimates them from Slurm. 1 SRU-Time s ={' '}
+          {num(perUnitGpuS)} GPU-s.
         </p>
       </div>
     </section>

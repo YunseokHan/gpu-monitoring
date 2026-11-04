@@ -11,9 +11,17 @@ ten minutes, not kept running: login-node processes do not survive a reboot, and
 entry does.
 
 Only KISTI's ISAM is supported for now. Its numbers -- not Slurm's -- are the ones the
-contract is billed against: Slurm on that site enforces no limit, decays its own usage
-with a 7-day half-life, and with PrivateData set it will not show one user another's
-jobs. ISAM shows the whole account, per user, but only through the previous day.
+contract is billed against: Slurm on that site enforces no limit and decays its own
+usage with a 7-day half-life. ISAM shows the whole account, per user, but adds a job
+only on the day after it ends, so sacct is asked for what has run since: jobs that
+ended today and running jobs' time so far, priced the way ISAM will price them.
+
+ISAM's "SRU-Time" is not wall time. Matched job by job against sacct on hangang (20
+jobs on 2026-11-03, every one within a second), it is
+
+    SRU seconds = elapsed x allocated CPUs / 864 = node-seconds / 3   (288 CPUs a node)
+
+whatever the job did with the CPUs or how many GPUs it held.
 
 Runs on the site's system python, which is 3.6 on KISTI, so this file sticks to the
 standard library and to syntax 3.6 accepts.
@@ -100,6 +108,47 @@ def parse_isam_menu_1(raw):
     }
 
 
+def pending_usage(account, cpus_per_node, node_s_per_sru):
+    """SRU seconds per user that ISAM has not billed yet, plus GPUs each holds now.
+
+    That is every job that ended since midnight (ISAM bills a job the day after it
+    ends) and every running job's time so far. Pending jobs have no elapsed time and
+    drop out on their own.
+    """
+    since = time.strftime("%Y-%m-%dT00:00:00")
+    proc = subprocess.run(
+        ["sacct", "-a", "-A", account, "-S", since, "-X", "-n", "-P",
+         "-o", "User,State,End,ElapsedRaw,NCPUS,AllocTRES"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=120,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError("sacct exited with %d: %s" % (proc.returncode, proc.stderr.decode("utf-8", "replace").strip()[:200]))
+
+    users = {}
+    for line in proc.stdout.decode("utf-8", "replace").splitlines():
+        fields = line.split("|")
+        if len(fields) != 6 or not fields[0]:
+            continue
+        user, state, end, elapsed, ncpus, tres = fields
+        running = state.startswith("RUNNING")
+        # -S also returns jobs that ended before midnight but overlapped it; ISAM has
+        # billed those already.
+        if not running and (not end or end < since):
+            continue
+        try:
+            sru = int(elapsed or 0) * int(ncpus or 0) / float(cpus_per_node) / node_s_per_sru
+        except ValueError:
+            continue
+        entry = users.setdefault(user, {"pending_s": 0.0, "running_gpus": 0})
+        entry["pending_s"] += sru
+        if running:
+            match = re.search(r"gres/gpu=(\d+)", tres)
+            entry["running_gpus"] += int(match.group(1)) if match else 0
+    return users
+
+
 def read_env(path):
     values = {}
     with open(path) as handle:
@@ -153,6 +202,8 @@ def main():
         "label": env.get("GPU_QUOTA_LABEL", ""),
         "source": "KISTI ISAM",
         "unit": env.get("GPU_QUOTA_UNIT", "node"),
+        # Defaults are hangang's, measured; see the module docstring.
+        "node_s_per_unit": float(env.get("GPU_QUOTA_NODE_S_PER_SRU", "3")),
         "gpus_per_node": int(env.get("GPU_QUOTA_GPUS_PER_NODE", "1")),
         "ts": time.time(),
         "error": None,
@@ -176,6 +227,22 @@ def main():
             reading = {}
 
     report.update(reading)
+
+    if report.get("account"):
+        try:
+            pending = pending_usage(
+                report["account"],
+                int(env.get("GPU_QUOTA_CPUS_PER_NODE", "288")),
+                report["node_s_per_unit"],
+            )
+            by_user = {user["user"]: user for user in report.setdefault("users", [])}
+            for name, extra in pending.items():
+                by_user.setdefault(name, {"user": name, "used_s": 0})
+                by_user[name].update(pending_s=round(extra["pending_s"], 1), running_gpus=extra["running_gpus"])
+            report["users"] = list(by_user.values())
+            report["pending_s"] = round(sum(extra["pending_s"] for extra in pending.values()), 1)
+        except Exception as exc:
+            report["pending_error"] = "could not read sacct: %s" % exc
 
     # ISAM only lists users who have spent something; show the rest of the group at zero
     # so a member with no jobs yet does not look like someone we forgot.

@@ -49,7 +49,7 @@ function groupNodes(nodes: NodeView[]): Group[] {
  * Which machines the lab wants to see first is a human decision -- it does not follow
  * from the node numbers, which only record the order the agents were deployed in -- so
  * it is a list rather than a rule. A cluster card spans both columns, so this order
- * decides the row breaks too: the four standalone nodes pair up into two rows, then
+ * decides the row breaks too: the standalone nodes pair up into rows, then
  * kakao-b200 takes a row of its own, then the two hangang contracts (quota cards, keyed
  * by their collector's GPU_QUOTA_CLUSTER), then gpusystem.
  *
@@ -60,7 +60,6 @@ function groupNodes(nodes: NodeView[]): Group[] {
 const CARD_ORDER = [
   'aidas',
   'dskna001',
-  'ARPA-NHN-2',
   'IPAI-H200',
   'kakao-b200',
   'hangang-arpa',
